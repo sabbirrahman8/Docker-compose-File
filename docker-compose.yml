@@ -1,0 +1,87 @@
+version: '3.3'
+
+# Container for Web Handler
+
+services:
+  cloudhub-frontend:
+    env_file:
+      - .env
+    depends_on:
+      - cloudhub-es
+      - cloudhub-syslog-ng
+    image: cloudhubkbd/cloudlog-syslog:frontend
+    container_name: cloudhub-frontend
+    entrypoint: /entrypoint.sh
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+    - $LOG_DISK:$LOG_DISK
+    - $HOME_FOLDER/cloudhub:/var/www/html/components
+    ports:
+      - 80:80
+    networks:
+      - cloudhub-log
+
+# Backend tier start here
+  cloudhub-syslog-ng:
+    env_file:
+      - .env
+    depends_on:
+      - cloudhub-es
+    environment:
+      TZ: 'GMT-6'
+    image: cloudhubkbd/cloudlog-syslog
+    container_name: cloudhub-syslog-ng
+    entrypoint: /entrypoint.sh
+    restart: unless-stopped
+    working_dir: /
+    ports:
+      - 2514:2514/udp
+    networks:
+      - cloudhub-log
+# Elasticsearch Tier start Here
+  cloudhub-es:
+    env_file:
+      - .env
+    environment:
+      discovery.type: 'single-node'
+      cluster.name: 'cloudhub-log'
+      node.name: 'node-master'
+      xpack.security.enabled: 'False'
+    image: elasticsearch:8.8.1
+    container_name: cloudhub-es
+    restart: unless-stopped
+    working_dir: /
+    expose:
+      - 9200
+    volumes:
+      - $LOG_DISK/data:/usr/share/elasticsearch/data
+      - $LOG_DISK/logs:/usr/share/elasticsearch/logs
+    networks:
+      - cloudhub-log
+    
+
+# Database Tier start Here
+  cloudhub-db:
+    env_file:
+      - .env
+    environment:
+      MARIADB_USER: $MYSQL_USER
+      MARIADB_PASSWORD: $MYSQL_PASS
+      MARIADB_DATABASE: $MYSQL_DB
+      MARIADB_ROOT_PASSWORD: $MYSQL_ROOT_PASS
+    image: mariadb:10.6.15
+    container_name: cloudhub-db
+    restart: unless-stopped
+    volumes:
+      - /var/lib/mysql:/var/lib/mysql
+    expose:
+      - 3306
+    networks:
+      - cloudhub-log
+
+
+
+networks:
+  cloudhub-log:
+
